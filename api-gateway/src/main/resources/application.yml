@@ -16,33 +16,44 @@ spring:
         connect-timeout: 2000
         response-timeout: 5s
       routes:
+        # lb:// — адрес берётся из Eureka по имени сервиса, а не из конфига
         - id: auth
-          uri: http://localhost:8081
+          uri: lb://auth-service
           predicates:
-            - Path=/api/v1/auth/**,/oauth2/token,/.well-known/**
-        - id: catalog
-          uri: http://localhost:8082
+            - Path=/auth/**,/oauth2/token,/.well-known/**
+        - id: books
+          uri: lb://book-service
           predicates:
-            - Path=/api/v1/books/**
+            - Path=/books/**
           filters:
-            # Поиск по каталогу — идемпотентный GET, его можно безопасно повторить.
+            # Поиск книг — идемпотентный GET, его можно безопасно повторить.
             - name: Retry
               args:
                 retries: 2
                 methods: GET
                 series: SERVER_ERROR
-        - id: readers
-          uri: http://localhost:8083
+        - id: users
+          uri: lb://user-service
           predicates:
-            - Path=/api/v1/readers/**
-        - id: circulation
-          uri: http://localhost:8084
+            - Path=/users/**
+        - id: borrow
+          uri: lb://borrow-service
           predicates:
-            - Path=/api/v1/loans/**
+            - Path=/borrow/**
         - id: notifications
-          uri: http://localhost:8085
+          uri: lb://notification-service
           predicates:
-            - Path=/api/v1/notifications/**
+            - Path=/notifications/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+    registry-fetch-interval-seconds: 5
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 15
 
 management:
   endpoints:
@@ -65,26 +76,3 @@ spring:
         jwt:
           public-key-location: ""
           jwk-set-uri: http://auth-service:8081/.well-known/jwks.json
-  cloud:
-    gateway:
-      routes:
-        - id: auth
-          uri: http://auth-service:8081
-          predicates:
-            - Path=/api/v1/auth/**,/oauth2/token,/.well-known/**
-        - id: catalog
-          uri: http://catalog-service:8082
-          predicates:
-            - Path=/api/v1/books/**
-        - id: readers
-          uri: http://readers-service:8083
-          predicates:
-            - Path=/api/v1/readers/**
-        - id: circulation
-          uri: http://circulation-service:8084
-          predicates:
-            - Path=/api/v1/loans/**
-        - id: notifications
-          uri: http://notification-service:8085
-          predicates:
-            - Path=/api/v1/notifications/**

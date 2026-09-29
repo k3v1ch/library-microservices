@@ -17,7 +17,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          # Свой же публичный ключ: нужен, чтобы сервис мог проверить токен на /api/v1/auth/me.
+          # Свой же публичный ключ: нужен, чтобы сервис мог проверить токен на /auth/me.
           public-key-location: classpath:keys/jwt-public.pem
 
 auth:
@@ -47,6 +47,16 @@ management:
 logging:
   pattern:
     level: "%5p [auth-service,%X{requestId:-}]"
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+    registry-fetch-interval-seconds: 5
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 15
 
 ---
 spring:

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Сквозной сценарий через API Gateway: регистрация, каталог, выдача, уведомление, возврат.
-# Каждый шаг печатает код ответа — видно, что работает авторизация, сага и события.
+# Сквозной сценарий через API Gateway: регистрация, книги, выдача, уведомление, возврат.
 set -uo pipefail
 GW="${GATEWAY:-http://localhost:8080}"
 STAMP=$(date +%s)
 
 field() { grep -o "\"$1\":\"[^\"]*\"" | head -1 | sed "s/.*\":\"//;s/\"$//"; }
 num_field() { grep -o "\"$1\":[0-9]*" | head -1 | sed "s/.*://"; }
+bool_field() { grep -o "\"$1\":\(true\|false\)" | head -1 | sed "s/.*://"; }
 step() { printf "\n\033[1m== %s\033[0m\n" "$1"; }
 show() { printf "   %s\n" "$1"; }
 
@@ -31,94 +31,94 @@ fi
 
 step "1. Вход библиотекаря (учётная запись создаётся при старте auth-service)"
 body=$(printf '{"username":"librarian","password":"librarian-pass"}')
-split "$(call POST /api/v1/auth/login '' "$body")"
+split "$(call POST /auth/login '' "$body")"
 LIB_TOKEN=$(printf '%s' "$BODY" | field access_token)
 show "HTTP $CODE, токен получен: ${LIB_TOKEN:0:32}..."
 
 step "2. Регистрация читателя и вход"
-READER_LOGIN="reader-$STAMP"
-body=$(printf '{"username":"%s","password":"reader-password"}' "$READER_LOGIN")
-split "$(call POST /api/v1/auth/register '' "$body")"
+LOGIN="reader-$STAMP"
+body=$(printf '{"username":"%s","password":"reader-password"}' "$LOGIN")
+split "$(call POST /auth/register '' "$body")"
 show "HTTP $CODE, выданные роли: $(printf '%s' "$BODY" | grep -o '"roles":\[[^]]*\]')"
-split "$(call POST /api/v1/auth/login '' "$body")"
-READER_TOKEN=$(printf '%s' "$BODY" | field access_token)
+split "$(call POST /auth/login '' "$body")"
+USER_TOKEN=$(printf '%s' "$BODY" | field access_token)
 show "HTTP $CODE, токен читателя получен"
 
-step "3. Читатель создаёт профиль (сервис читателей)"
+step "3. Читатель создаёт профиль (user-service)"
 body=$(printf '{"fullName":"Иван Петров","email":"ivan.%s@example.com","phone":"+7 999 123-45-67"}' "$STAMP")
-split "$(call POST /api/v1/readers "$READER_TOKEN" "$body")"
-READER_ID=$(printf '%s' "$BODY" | field id)
-show "HTTP $CODE, readerId=$READER_ID, карта $(printf '%s' "$BODY" | field cardNumber)"
+split "$(call POST /users "$USER_TOKEN" "$body")"
+USER_ID=$(printf '%s' "$BODY" | field id)
+show "HTTP $CODE, userId=$USER_ID, карта $(printf '%s' "$BODY" | field cardNumber)"
 
-step "4. Библиотекарь добавляет книгу в каталог"
-body=$(printf '{"isbn":"978-5-4461-%s","title":"Чистый код","author":"Роберт Мартин","genre":"IT","publishedYear":2008,"totalCopies":2}' "$((RANDOM + 1000))")
-split "$(call POST /api/v1/books "$LIB_TOKEN" "$body")"
+step "4. Библиотекарь добавляет книгу (book-service)"
+body=$(printf '{"title":"Чистый код","author":"Роберт Мартин"}')
+split "$(call POST /books "$LIB_TOKEN" "$body")"
 BOOK_ID=$(printf '%s' "$BODY" | field id)
-show "HTTP $CODE, bookId=$BOOK_ID, экземпляров $(printf '%s' "$BODY" | num_field availableCopies)"
+show "HTTP $CODE, bookId=$BOOK_ID, available=$(printf '%s' "$BODY" | bool_field available)"
 
-step "5. Поиск по каталогу без токена (каталог открыт всем)"
+step "5. Поиск книги без токена (список книг открыт всем)"
 # q=код в percent-encoding: кириллицу в URL нужно кодировать
-split "$(call GET '/api/v1/books?q=%D0%BA%D0%BE%D0%B4' '')"
+split "$(call GET '/books?q=%D0%BA%D0%BE%D0%B4' '')"
 show "HTTP $CODE, найдено книг: $(printf '%s' "$BODY" | num_field totalElements)"
 
 step "6. Попытка читателя добавить книгу — должна быть 403"
-body=$(printf '{"isbn":"1234567890","title":"Пробная","author":"Никто","totalCopies":1}')
-split "$(call POST /api/v1/books "$READER_TOKEN" "$body")"
+body=$(printf '{"title":"Пробная","author":"Никто"}')
+split "$(call POST /books "$USER_TOKEN" "$body")"
 show "HTTP $CODE (ожидаем 403 Forbidden)"
 
-step "7. Выдача книги: сага «читатель → бронь экземпляра → выдача»"
+step "7. Выдача книги: сага «читатель → бронь книги → выдача»"
 IDEMPOTENCY_KEY="demo-$STAMP"
-body=$(printf '{"readerId":"%s","bookId":"%s"}' "$READER_ID" "$BOOK_ID")
-split "$(call POST /api/v1/loans "$LIB_TOKEN" "$body" "Idempotency-Key: $IDEMPOTENCY_KEY")"
-LOAN_ID=$(printf '%s' "$BODY" | field id)
-show "HTTP $CODE, loanId=$LOAN_ID, статус $(printf '%s' "$BODY" | field status), вернуть до $(printf '%s' "$BODY" | field dueDate)"
+body=$(printf '{"userId":"%s","bookId":"%s"}' "$USER_ID" "$BOOK_ID")
+split "$(call POST /borrow "$LIB_TOKEN" "$body" "Idempotency-Key: $IDEMPOTENCY_KEY")"
+BORROW_ID=$(printf '%s' "$BODY" | field id)
+show "HTTP $CODE, borrowId=$BORROW_ID, статус $(printf '%s' "$BODY" | field status), вернуть до $(printf '%s' "$BODY" | field dueDate)"
 
 step "8. Повтор того же запроса с тем же Idempotency-Key"
-split "$(call POST /api/v1/loans "$LIB_TOKEN" "$body" "Idempotency-Key: $IDEMPOTENCY_KEY")"
-LOAN_ID_2=$(printf '%s' "$BODY" | field id)
-if [ "$LOAN_ID" = "$LOAN_ID_2" ]; then
-  show "HTTP $CODE, вернулась та же выдача — второй экземпляр не списан"
+split "$(call POST /borrow "$LIB_TOKEN" "$body" "Idempotency-Key: $IDEMPOTENCY_KEY")"
+BORROW_ID_2=$(printf '%s' "$BODY" | field id)
+if [ "$BORROW_ID" = "$BORROW_ID_2" ]; then
+  show "HTTP $CODE, вернулась та же выдача — вторая не создана"
 else
-  show "ВНИМАНИЕ: создана вторая выдача $LOAN_ID_2"
+  show "ВНИМАНИЕ: создана вторая выдача $BORROW_ID_2"
 fi
 
-step "9. В каталоге стало меньше свободных экземпляров"
-split "$(call GET "/api/v1/books/$BOOK_ID" '')"
-show "HTTP $CODE, свободно $(printf '%s' "$BODY" | num_field availableCopies) из $(printf '%s' "$BODY" | num_field totalCopies)"
+step "9. Книга больше не доступна"
+split "$(call GET "/books/$BOOK_ID" '')"
+show "HTTP $CODE, available=$(printf '%s' "$BODY" | bool_field available)"
 
 step "10. Читатель смотрит свои выдачи"
-split "$(call GET /api/v1/loans/my "$READER_TOKEN")"
+split "$(call GET /borrow/my "$USER_TOKEN")"
 show "HTTP $CODE, выдач у читателя: $(printf '%s' "$BODY" | num_field totalElements)"
 
-step "11. Событие LoanIssued доходит до сервиса уведомлений (outbox → relay)"
+step "11. Событие borrow.issued доходит до notification-service (outbox → relay)"
 sleep 4
-split "$(call "GET" "/api/v1/notifications?readerId=$READER_ID" "$LIB_TOKEN")"
+split "$(call GET "/notifications?userId=$USER_ID" "$LIB_TOKEN")"
 show "HTTP $CODE"
 printf '%s' "$BODY" | grep -o '"subject":"[^"]*","body":"[^"]*"' \
   | sed 's/"subject":"/   тема: /;s/","body":"/ | текст: /;s/"$//'
 
 step "12. Журнал событий выдачи (event sourcing, аудит)"
-split "$(call GET "/api/v1/loans/$LOAN_ID/history" "$LIB_TOKEN")"
+split "$(call GET "/borrow/$BORROW_ID/history" "$LIB_TOKEN")"
 show "HTTP $CODE, события: $(printf '%s' "$BODY" | grep -o '"type":"[^"]*"' | sed 's/"type":"//;s/"//' | tr '\n' ' ')"
 
 step "13. Возврат книги"
-split "$(call POST "/api/v1/loans/$LOAN_ID/return" "$LIB_TOKEN")"
+split "$(call POST "/borrow/$BORROW_ID/return" "$LIB_TOKEN")"
 show "HTTP $CODE, статус $(printf '%s' "$BODY" | field status)"
-split "$(call GET "/api/v1/books/$BOOK_ID" '')"
-show "в каталоге снова свободно: $(printf '%s' "$BODY" | num_field availableCopies)"
+split "$(call GET "/books/$BOOK_ID" '')"
+show "книга снова available=$(printf '%s' "$BODY" | bool_field available)"
 
 step "14. Уведомление о возврате"
 sleep 4
-split "$(call GET "/api/v1/notifications?readerId=$READER_ID" "$LIB_TOKEN")"
+split "$(call GET "/notifications?userId=$USER_ID" "$LIB_TOKEN")"
 show "HTTP $CODE, всего уведомлений читателю: $(printf '%s' "$BODY" | grep -o '"eventId"' | wc -l | tr -d ' ')"
 printf '%s' "$BODY" | grep -o '"subject":"[^"]*"' | sed 's/"subject":"/   тема: /;s/"$//'
 
 step "15. Запрос без токена к защищённому ресурсу — 401"
-split "$(call GET /api/v1/loans '')"
+split "$(call GET /borrow '')"
 show "HTTP $CODE (ожидаем 401 Unauthorized)"
 
 step "16. Внутренний API снаружи недоступен"
-split "$(call GET "/internal/v1/readers/$READER_ID" "$LIB_TOKEN")"
+split "$(call GET "/internal/users/$USER_ID" "$LIB_TOKEN")"
 show "HTTP $CODE (ожидаем 403 — шлюз не публикует /internal/**)"
 
 printf "\n\033[1mСценарий пройден.\033[0m Логи сервисов: logs/*.log\n"

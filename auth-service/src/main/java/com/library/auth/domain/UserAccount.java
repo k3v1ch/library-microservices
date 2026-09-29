@@ -9,7 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-/** Учётная запись: логин, хеш пароля и роли. Профиль читателя живёт в readers-service. */
+/** Учётная запись: логин, хеш пароля и роли. Профиль читателя живёт в user-service. */
 @Entity
 @Table(name = "user_accounts")
 public class UserAccount {

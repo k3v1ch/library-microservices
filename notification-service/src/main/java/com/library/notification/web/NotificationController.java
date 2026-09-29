@@ -1,6 +1,6 @@
 package com.library.notification.web;
 
-import com.library.common.event.LoanEvent;
+import com.library.common.event.BorrowEvent;
 import com.library.notification.domain.Notification;
 import com.library.notification.domain.NotificationRepository;
 import com.library.notification.service.NotificationService;
@@ -39,30 +39,30 @@ public class NotificationController {
 
     /** Приём события из outbox сервиса выдачи (режим без Kafka). */
     @Operation(summary = "Внутренний приём доменного события (scope=internal)")
-    @PostMapping("/internal/v1/events")
+    @PostMapping("/internal/events")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public void receive(@Valid @RequestBody LoanEvent event) {
+    public void receive(@Valid @RequestBody BorrowEvent event) {
         notificationService.handle(event);
     }
 
     @Operation(summary = "Журнал уведомлений (библиотекарь)", security = @SecurityRequirement(name = "bearerAuth"))
-    @GetMapping("/api/v1/notifications")
+    @GetMapping("/notifications")
     @PreAuthorize("hasRole('LIBRARIAN')")
-    public List<NotificationResponse> list(@RequestParam(required = false) UUID readerId,
+    public List<NotificationResponse> list(@RequestParam(required = false) UUID userId,
                                            @PageableDefault(size = 50) Pageable pageable) {
-        Page<Notification> page = readerId == null
+        Page<Notification> page = userId == null
                 ? notifications.findAllByOrderByCreatedAtDesc(pageable)
-                : notifications.findByReaderIdOrderByCreatedAtDesc(readerId, pageable);
+                : notifications.findByUserIdOrderByCreatedAtDesc(userId, pageable);
         return page.getContent().stream().map(NotificationResponse::from).toList();
     }
 
-    public record NotificationResponse(UUID id, UUID eventId, String eventType, UUID readerId,
+    public record NotificationResponse(UUID id, UUID eventId, String eventType, UUID userId,
                                        String channel, String subject, String body,
                                        String status, String error, Instant createdAt) {
 
         static NotificationResponse from(Notification notification) {
             return new NotificationResponse(notification.getId(), notification.getEventId(),
-                    notification.getEventType(), notification.getReaderId(), notification.getChannel(),
+                    notification.getEventType(), notification.getUserId(), notification.getChannel(),
                     notification.getSubject(), notification.getBody(), notification.getStatus().name(),
                     notification.getError(), notification.getCreatedAt());
         }

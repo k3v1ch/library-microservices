@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Запуск всех сервисов локально: H2 в памяти, без Docker и без Kafka.
-# Порядок важен: сначала аутентификация и данные, потом выдача, последним шлюз.
+# Первым поднимается Eureka — остальные регистрируются в ней и находят друг друга по имени.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 ROOT="$PWD"
@@ -33,13 +33,13 @@ if [ -z "$JAVA" ]; then
 fi
 echo "Java: $("$JAVA" -version 2>&1 | head -1)"
 
-# name:port — уведомления поднимаем раньше выдачи, чтобы первое же событие дошло сразу
 SERVICES=(
+  "discovery-server:8761"
   "auth-service:8081"
-  "catalog-service:8082"
-  "readers-service:8083"
+  "book-service:8082"
+  "user-service:8083"
   "notification-service:8085"
-  "circulation-service:8084"
+  "borrow-service:8084"
   "api-gateway:8080"
 )
 
@@ -62,7 +62,7 @@ for entry in "${SERVICES[@]}"; do
   port="${entry##*:}"
   jar=$(ls "$ROOT/$name/target/$name-"*.jar 2>/dev/null | head -1)
   if [ -z "$jar" ]; then
-    echo "Нет собранного jar для $name. Сначала: ./mvnw -DskipTests package" >&2
+    echo "Нет собранного jar для $name. Сначала: ./scripts/build.sh" >&2
     exit 1
   fi
   echo "-> запускаю $name"
@@ -71,13 +71,23 @@ for entry in "${SERVICES[@]}"; do
   wait_up "$name" "$port" || exit 1
 done
 
+# Регистрация в Eureka занимает несколько секунд: ждём, пока шлюз научится маршрутизировать.
+echo "-> жду регистрации сервисов в Eureka"
+for _ in $(seq 1 60); do
+  if [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/books)" = "200" ]; then
+    echo "   маршруты через шлюз работают"
+    break
+  fi
+  sleep 2
+done
+
 cat <<'INFO'
 
 Все сервисы работают.
   Шлюз (единая точка входа):  http://localhost:8080
-  Swagger каталога:           http://localhost:8082/swagger-ui.html
+  Eureka (кто зарегистрирован): http://localhost:8761
+  Swagger книг:               http://localhost:8082/swagger-ui.html
   Swagger выдачи:             http://localhost:8084/swagger-ui.html
-  Метрики выдачи:             http://localhost:8084/actuator/prometheus
 
 Сценарий целиком:  ./scripts/demo.sh
 Остановить:        ./scripts/stop-all.sh

@@ -38,8 +38,11 @@ public class LibraryCommonAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "library.auth", name = "base-url")
-    public ServiceTokenProvider serviceTokenProvider(LibraryProperties properties) {
-        RestClient authClient = RestClient.builder()
+    public ServiceTokenProvider serviceTokenProvider(ObjectProvider<RestClient.Builder> builders,
+                                                     LibraryProperties properties) {
+        // Тот же билдер, что и у остальных клиентов: с Eureka адрес auth-service ищется по имени.
+        RestClient authClient = builders.getIfAvailable(RestClient::builder)
+                .clone()
                 .baseUrl(properties.getAuth().getBaseUrl())
                 .build();
         return new ServiceTokenProvider(authClient, properties.getAuth());

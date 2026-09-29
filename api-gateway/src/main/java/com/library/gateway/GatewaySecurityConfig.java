@@ -18,10 +18,10 @@ public class GatewaySecurityConfig {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchange -> exchange
                         // Вход и регистрация — без токена.
-                        .pathMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login").permitAll()
+                        .pathMatchers(HttpMethod.POST, "/auth/register", "/auth/login").permitAll()
                         .pathMatchers("/.well-known/**", "/actuator/health/**", "/actuator/prometheus").permitAll()
                         // Поиск по каталогу открыт.
-                        .pathMatchers(HttpMethod.GET, "/api/v1/books/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/books/**").permitAll()
                         // Внутренние API наружу не публикуются вообще.
                         .pathMatchers("/internal/**").denyAll()
                         .anyExchange().authenticated())

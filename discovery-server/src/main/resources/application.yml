@@ -1,0 +1,26 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: discovery-server
+
+eureka:
+  client:
+    # Сам себя в реестре не регистрирует и реестр не забирает — он и есть реестр.
+    register-with-eureka: false
+    fetch-registry: false
+  server:
+    # Для демонстрации: иначе первые минуты реестр не отдаёт свежие данные.
+    enable-self-preservation: false
+    response-cache-update-interval-ms: 2000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  pattern:
+    level: "%5p [discovery-server]"

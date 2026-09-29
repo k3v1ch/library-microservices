@@ -10,7 +10,7 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
 
     boolean existsByEventId(UUID eventId);
 
-    Page<Notification> findByReaderIdOrderByCreatedAtDesc(UUID readerId, Pageable pageable);
+    Page<Notification> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
     Page<Notification> findAllByOrderByCreatedAtDesc(Pageable pageable);
 }

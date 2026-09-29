@@ -14,7 +14,7 @@ import java.util.UUID;
 /** Отправленное (или не отправленное) уведомление. */
 @Entity
 @Table(name = "notifications", indexes = {
-        @Index(name = "idx_notifications_reader", columnList = "reader_id"),
+        @Index(name = "idx_notifications_reader", columnList = "user_id"),
         @Index(name = "idx_notifications_event", columnList = "event_id", unique = true)
 })
 public class Notification {
@@ -32,8 +32,8 @@ public class Notification {
     @Column(name = "event_type", nullable = false, length = 32)
     private String eventType;
 
-    @Column(name = "reader_id", nullable = false)
-    private UUID readerId;
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
 
     @Column(nullable = false, length = 16)
     private String channel;
@@ -61,12 +61,12 @@ public class Notification {
     protected Notification() {
     }
 
-    public Notification(UUID eventId, String eventType, UUID readerId, String channel,
+    public Notification(UUID eventId, String eventType, UUID userId, String channel,
                         String recipient, String subject, String body) {
         this.id = UUID.randomUUID();
         this.eventId = eventId;
         this.eventType = eventType;
-        this.readerId = readerId;
+        this.userId = userId;
         this.channel = channel;
         this.recipient = recipient;
         this.subject = subject;
@@ -92,8 +92,8 @@ public class Notification {
         return eventType;
     }
 
-    public UUID getReaderId() {
-        return readerId;
+    public UUID getUserId() {
+        return userId;
     }
 
     public String getChannel() {

@@ -1,5 +1,5 @@
-# Полный стенд: Postgres (своя БД на сервис), Kafka и шесть сервисов.
-# Перед запуском собрать jar-ы:  ./mvnw -DskipTests package
+# Полный стенд: Postgres, Kafka, Eureka и сервисы.
+# Перед запуском собрать jar-ы:  ./scripts/build.sh
 # Затем:                         docker compose up --build
 name: library
 
@@ -35,6 +35,14 @@ services:
     ports:
       - "9092:9092"
 
+  discovery-server:
+    build:
+      context: .
+      args:
+        SERVICE: discovery-server
+    ports:
+      - "8761:8761"
+
   auth-service:
     build:
       context: .
@@ -42,50 +50,62 @@ services:
         SERVICE: auth-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
       postgres:
         condition: service_healthy
+      discovery-server:
+        condition: service_started
     ports:
       - "8081:8081"
 
-  catalog-service:
+  book-service:
     build:
       context: .
       args:
-        SERVICE: catalog-service
+        SERVICE: book-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
       postgres:
         condition: service_healthy
+      discovery-server:
+        condition: service_started
     ports:
       - "8082:8082"
 
-  readers-service:
+  user-service:
     build:
       context: .
       args:
-        SERVICE: readers-service
+        SERVICE: user-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
       postgres:
         condition: service_healthy
+      discovery-server:
+        condition: service_started
     ports:
       - "8083:8083"
 
-  circulation-service:
+  borrow-service:
     build:
       context: .
       args:
-        SERVICE: circulation-service
+        SERVICE: borrow-service
     # Профиль kafka включает отправку событий в брокер вместо HTTP-доставки.
     environment:
       SPRING_PROFILES_ACTIVE: docker,kafka
+      EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
+        condition: service_started
+      discovery-server:
         condition: service_started
     ports:
       - "8084:8084"
@@ -97,10 +117,13 @@ services:
         SERVICE: notification-service
     environment:
       SPRING_PROFILES_ACTIVE: docker,kafka
+      EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
+        condition: service_started
+      discovery-server:
         condition: service_started
     ports:
       - "8085:8085"
@@ -112,11 +135,13 @@ services:
         SERVICE: api-gateway
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
+      - discovery-server
       - auth-service
-      - catalog-service
-      - readers-service
-      - circulation-service
+      - book-service
+      - user-service
+      - borrow-service
       - notification-service
     ports:
       - "8080:8080"

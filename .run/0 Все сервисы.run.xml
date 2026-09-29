@@ -1,10 +1,11 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="0 Все сервисы" type="CompoundRunConfigurationType">
+    <toRun name="discovery-server" type="Application" />
     <toRun name="auth-service" type="Application" />
-    <toRun name="catalog-service" type="Application" />
-    <toRun name="readers-service" type="Application" />
+    <toRun name="book-service" type="Application" />
+    <toRun name="user-service" type="Application" />
     <toRun name="notification-service" type="Application" />
-    <toRun name="circulation-service" type="Application" />
+    <toRun name="borrow-service" type="Application" />
     <toRun name="api-gateway" type="Application" />
     <method v="2" />
   </configuration>

@@ -1,8 +1,8 @@
 package com.library.notification;
 
 import com.library.common.event.EventType;
-import com.library.common.event.LoanEvent;
-import com.library.notification.client.ReadersClient;
+import com.library.common.event.BorrowEvent;
+import com.library.notification.client.UserClient;
 import com.library.notification.domain.Notification;
 import com.library.notification.domain.NotificationRepository;
 import com.library.notification.service.NotificationService;
@@ -29,21 +29,21 @@ class NotificationServiceTest {
     private NotificationRepository notifications;
 
     @MockitoBean
-    private ReadersClient readersClient;
+    private UserClient userClient;
 
     @Test
     void sameEventDeliveredTwiceCreatesOneNotification() {
-        UUID readerId = UUID.randomUUID();
-        when(readersClient.contact(readerId))
-                .thenReturn(new ReadersClient.ReaderContact(readerId, "Иван Петров", "ivan@example.com", null));
-        LoanEvent event = LoanEvent.of(EventType.LOAN_ISSUED, UUID.randomUUID(), readerId, UUID.randomUUID(),
+        UUID userId = UUID.randomUUID();
+        when(userClient.contact(userId))
+                .thenReturn(new UserClient.UserContact(userId, "Иван Петров", "ivan@example.com", null));
+        BorrowEvent event = BorrowEvent.of(EventType.BORROW_ISSUED, UUID.randomUUID(), userId, UUID.randomUUID(),
                 "Чистый код", LocalDate.now().plusDays(14), null);
 
         notificationService.handle(event);
         notificationService.handle(event);
 
         List<Notification> saved = notifications.findAll().stream()
-                .filter(notification -> notification.getReaderId().equals(readerId))
+                .filter(notification -> notification.getUserId().equals(userId))
                 .toList();
         assertThat(saved).hasSize(1);
         assertThat(saved.getFirst().getStatus()).isEqualTo(Notification.Status.SENT);
@@ -53,15 +53,15 @@ class NotificationServiceTest {
 
     @Test
     void overdueEventProducesOverdueText() {
-        UUID readerId = UUID.randomUUID();
-        when(readersClient.contact(readerId))
-                .thenReturn(new ReadersClient.ReaderContact(readerId, "Анна", "anna@example.com", null));
+        UUID userId = UUID.randomUUID();
+        when(userClient.contact(userId))
+                .thenReturn(new UserClient.UserContact(userId, "Анна", "anna@example.com", null));
 
-        notificationService.handle(LoanEvent.of(EventType.LOAN_OVERDUE, UUID.randomUUID(), readerId,
+        notificationService.handle(BorrowEvent.of(EventType.BORROW_OVERDUE, UUID.randomUUID(), userId,
                 UUID.randomUUID(), "Рефакторинг", LocalDate.now().minusDays(3), 3));
 
         Notification notification = notifications.findAll().stream()
-                .filter(candidate -> candidate.getReaderId().equals(readerId))
+                .filter(candidate -> candidate.getUserId().equals(userId))
                 .findFirst().orElseThrow();
         assertThat(notification.getSubject()).isEqualTo("Книга просрочена");
         assertThat(notification.getBody()).contains("просрочена на 3 дн");
@@ -69,14 +69,14 @@ class NotificationServiceTest {
 
     @Test
     void notificationIsStoredAsFailedWhenContactsAreUnavailable() {
-        UUID readerId = UUID.randomUUID();
-        when(readersClient.contact(any())).thenReturn(null);
+        UUID userId = UUID.randomUUID();
+        when(userClient.contact(any())).thenReturn(null);
 
-        notificationService.handle(LoanEvent.of(EventType.LOAN_ISSUED, UUID.randomUUID(), readerId,
+        notificationService.handle(BorrowEvent.of(EventType.BORROW_ISSUED, UUID.randomUUID(), userId,
                 UUID.randomUUID(), "Книга", LocalDate.now().plusDays(7), null));
 
         Notification notification = notifications.findAll().stream()
-                .filter(candidate -> candidate.getReaderId().equals(readerId))
+                .filter(candidate -> candidate.getUserId().equals(userId))
                 .findFirst().orElseThrow();
         assertThat(notification.getStatus()).isEqualTo(Notification.Status.FAILED);
         assertThat(notification.getError()).contains("контакты");
