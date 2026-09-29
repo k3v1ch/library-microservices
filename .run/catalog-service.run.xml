@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="catalog-service" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="com.library.catalog.CatalogServiceApplication" />
+    <module name="catalog-service" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

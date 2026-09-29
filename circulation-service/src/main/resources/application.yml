@@ -1,0 +1,143 @@
+server:
+  port: 8084
+  shutdown: graceful
+
+spring:
+  application:
+    name: circulation-service
+  datasource:
+    url: jdbc:h2:mem:circulation;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location: classpath:keys/jwt-public.pem
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 5
+
+# Общая инфраструктура из library-common: адрес сервиса аутентификации и таймауты вызовов.
+library:
+  auth:
+    base-url: http://localhost:8081
+    client-id: internal-service
+    client-secret: internal-secret
+  http:
+    connect-timeout: 2s
+    read-timeout: 3s
+
+circulation:
+  loan-period-days: 14
+  max-active-loans: 3
+  max-extensions: 2
+  due-soon-days: 2
+  saga-timeout: 2m
+  outbox-max-attempts: 5
+  outbox:
+    poll-interval-ms: 2000
+  schedule:
+    overdue-interval-ms: 60000
+    saga-interval-ms: 30000
+    release-interval-ms: 30000
+  services:
+    catalog-url: http://localhost:8082
+    readers-url: http://localhost:8083
+    notifications-url: http://localhost:8085
+
+resilience4j:
+  retry:
+    instances:
+      catalog:
+        max-attempts: 3
+        wait-duration: 200ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        # Повторяем только то, что может пройти со второй попытки: сеть и 5xx.
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - com.library.circulation.client.RemoteServiceException
+      readers:
+        max-attempts: 3
+        wait-duration: 200ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - com.library.circulation.client.RemoteServiceException
+  circuitbreaker:
+    instances:
+      catalog:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        # Бизнес-отказ (нет экземпляров) не должен открывать предохранитель.
+        ignore-exceptions:
+          - com.library.common.api.ApiException
+      readers:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        ignore-exceptions:
+          - com.library.common.api.ApiException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,circuitbreakers
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+  health:
+    circuitbreakers:
+      enabled: true
+
+logging:
+  pattern:
+    level: "%5p [circulation-service,%X{requestId:-}]"
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/circulation
+    username: library
+    password: library
+  kafka:
+    bootstrap-servers: kafka:9092
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location: ""
+          jwk-set-uri: http://auth-service:8081/.well-known/jwks.json
+library:
+  auth:
+    base-url: http://auth-service:8081
+circulation:
+  services:
+    catalog-url: http://catalog-service:8082
+    readers-url: http://readers-service:8083
+    notifications-url: http://notification-service:8085

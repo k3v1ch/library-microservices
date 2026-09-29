@@ -1,0 +1,61 @@
+server:
+  port: 8081
+  shutdown: graceful
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:h2:mem:auth;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Свой же публичный ключ: нужен, чтобы сервис мог проверить токен на /api/v1/auth/me.
+          public-key-location: classpath:keys/jwt-public.pem
+
+auth:
+  issuer: http://localhost:8081
+  token-ttl: 15m
+  service-token-ttl: 5m
+  clients:
+    # В продакшене секреты приходят из Vault / K8s Secret, а не из файла в репозитории.
+    internal-service: internal-secret
+  bootstrap:
+    # Первый библиотекарь: роль LIBRARIAN через публичную регистрацию не выдаётся.
+    enabled: true
+    librarian-username: librarian
+    librarian-password: librarian-pass
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+
+logging:
+  pattern:
+    level: "%5p [auth-service,%X{requestId:-}]"
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/auth
+    username: library
+    password: library
+auth:
+  issuer: http://auth-service:8081
